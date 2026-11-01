@@ -1,0 +1,19 @@
+# Lance zettel-ai.service chaque soir. Si le PC était éteint à l'heure prévue, le traitement
+# se fait au démarrage suivant (Persistent=true).
+#
+# Installées par le paquet zettel-ai dans /usr/lib/systemd/user (inactives par défaut).
+# Activation :
+#   systemctl --user enable --now zettel-ai.timer
+# Vérifier / tester :
+#   systemctl --user list-timers zettel-ai.timer
+#   systemctl --user start zettel-ai.service      # lancement immédiat
+#   journalctl --user -u zettel-ai.service -e     # sortie du dernier traitement
+[Unit]
+Description=zettel_ai : traitement du journal dicté chaque soir
+
+[Timer]
+OnCalendar=*-*-* 23:30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

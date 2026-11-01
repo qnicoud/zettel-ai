@@ -1,0 +1,10 @@
+__pycache__/
+.coverage
+.pytest_cache/
+# Artefacts de makepkg et du build Python
+packaging/src/
+packaging/pkg/
+packaging/*.pkg.tar.*
+build/
+dist/
+*.egg-info/

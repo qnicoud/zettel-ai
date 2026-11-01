@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Dictée journalisée hyprwhspr (bascule) :
+#   1er appui  -> démarre un enregistrement en mode capture (aucun collage, presse-papier intact)
+#   2e appui   -> arrête l'enregistrement ; la transcription est ajoutée au journal
+#
+# Variables optionnelles :
+#   HYPRWHSPR_JOURNAL       fichier journal (défaut : ~/Documents/journal-dictee.md)
+#   HYPRWHSPR_JOURNAL_LANG  code langue forcé, ex. "fr" (défaut : réglage du service)
+set -u
+
+HYPRWHSPR=/usr/bin/hyprwhspr
+JOURNAL="${HYPRWHSPR_JOURNAL:-$HOME/Documents/journal-dictee.md}"
+LANG_CODE="${HYPRWHSPR_JOURNAL_LANG:-}"
+RUNDIR="${XDG_RUNTIME_DIR:-/tmp}"
+LOCK="$RUNDIR/hyprwhspr-journal.lock"
+ERRLOG="$RUNDIR/hyprwhspr-journal.err"
+
+notify() {
+    notify-send -a hyprwhspr -u low "Journal" "$1" 2>/dev/null || true
+}
+
+# Une capture est déjà en cours : ce 2e appui sert à l'arrêter.
+exec 9>"$LOCK"
+if ! flock -n 9; then
+    exec 9>&-
+    exec "$HYPRWHSPR" record stop
+fi
+
+lang_args=()
+[ -n "$LANG_CODE" ] && lang_args=(--lang "$LANG_CODE")
+
+# Bloque jusqu'à la fin de la transcription.
+text="$("$HYPRWHSPR" record capture "${lang_args[@]}" 2>"$ERRLOG")"
+status=$?
+
+if [ "$status" -ne 0 ]; then
+    notify "Échec de la capture : $(tail -n1 "$ERRLOG")"
+    exit "$status"
+fi
+if [ -z "${text//[[:space:]]/}" ]; then
+    notify "Rien n'a été transcrit"
+    exit 0
+fi
+
+mkdir -p "$(dirname "$JOURNAL")"
+printf -- '- [%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$text" >> "$JOURNAL"
+notify "Entrée ajoutée au journal"

@@ -1,0 +1,53 @@
+# Configuration de zettel-ai : ~/.config/zettel-ai/config.toml
+# (ou $XDG_CONFIG_HOME/zettel-ai/config.toml, ou le fichier désigné par $ZETTEL_AI_CONFIG)
+#
+# Toutes les clés sont facultatives : une clé absente garde la valeur intégrée, montrée ici.
+# Une clé inconnue ou mal typée arrête zettel-ai avec un message (pas d'erreur silencieuse).
+# Les chemins acceptent « ~ ».
+
+[chemins]
+journal = "~/Documents/journal-dictee.md"              # journal dicté par hyprwhspr
+base_org_roam = "~/bin/git-repos-personal/org-roam-database"   # dépôt git de la base
+dossier_journalier = "daily"                            # org-roam-dailies, relatif à la base
+
+[ollama]
+url = "http://localhost:11434"
+modele = "hf.co/bartowski/Qwen_Qwen3.5-9B-GGUF:Q5_K_M"
+modele_embeddings = "bge-m3"
+contexte = 16384           # num_ctx
+temperature = 0.3          # entre 0 et 2
+think = false              # true : Qwen « réfléchit » avant de décider (meilleur, plus lent)
+
+[notes]
+notes_proches = 10         # notes proches montrées à Qwen pour chaque sujet
+max_liens = 5              # liens au plus par note créée ou complétée
+
+[transcription]
+# S'AJOUTENT à la liste intégrée (écosystème Hyprland, hyprwhspr, Emacs/Org, tes projets).
+# Orthographe exacte transmise à Qwen.
+noms_propres = []
+# ex. noms_propres = ["Zettelkasten", "Neovim"]
+
+# Erreurs de Whisper corrigées dans le texte AVANT Qwen (mot entier, casse ignorée).
+# S'AJOUTENT aux corrections intégrées (« hyperland » -> Hyprland, « Cloud Code »…).
+[transcription.corrections]
+# "zettel casten" = "Zettelkasten"
+
+[todo]
+# Ces mots-clés REMPLACENT les valeurs intégrées (ceux de Doom Emacs). Un fichier qui a
+# sa propre ligne #+TODO: est toujours respecté.
+mots_ouverts = ["TODO", "PROJ", "LOOP", "STRT", "WAIT", "HOLD", "IDEA", "NEXT", "WAITING", "STARTED"]
+mot_fait = "DONE"          # posé par « marquer_fait »
+mot_abandon = "KILL"       # posé pour une tâche abandonnée
+
+[git]
+branche_principale = "main"     # jamais modifiée par zettel-ai (seulement par zettel-valider)
+branche_relecture = "zettel-ai"
+
+[hyprwhspr]
+gerer = true               # couper hyprwhspr pendant le traitement (VRAM), puis le relancer
+script = "/usr/lib/hyprwhspr/config/hyprland/hyprwhspr-tray.sh"
+
+[notification]
+activer = true             # notify-send en fin de traitement ; clic -> zettel-valider
+terminal = "kitty"         # doit accepter --title et -e (kitty, alacritty…)

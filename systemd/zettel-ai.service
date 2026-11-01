@@ -1,0 +1,17 @@
+# Traite le journal dicté avec zettel-ai (notes org-roam, branche de relecture zettel-ai).
+# Installation : voir zettel-ai.timer.
+[Unit]
+Description=zettel_ai : journal dicté -> notes org-roam (LLM local)
+# hyprwhspr, notify-send et la fenêtre de validation ont besoin de la session graphique
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+# Ollama est un service système : on vérifie juste qu'il répond avant de commencer
+ExecStartPre=/usr/bin/curl --silent --fail --max-time 10 --output /dev/null http://localhost:11434/api/version
+ExecStart=/usr/bin/zettel-ai
+# SIGTERM (arrêt, extinction) : le script relance hyprwhspr et commite ce qui a été écrit
+KillSignal=SIGTERM
+TimeoutStartSec=2h
+TimeoutStopSec=60
+Nice=10

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zettel-ai"
+version = "0.2.0"
+description = "Journal vocal dicté -> notes Zettelkasten org-roam, avec un LLM local (Ollama)"
+requires-python = ">=3.11"
+dependencies = ["requests"]
+
+[project.scripts]
+zettel-ai = "zettel.cli:main"
+zettel-valider = "zettel.cli_valider:main"
+
+[tool.setuptools.packages.find]
+include = ["zettel", "zettel.*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
