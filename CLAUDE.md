@@ -89,7 +89,7 @@ prend que des décisions encadrées, validées avant écriture.
 #### Tâches, suivi de projet, logistique (`zettel/suivi.py`)
 
 L'extraction (un seul appel Qwen, avec la date de la dictée) renvoie cinq listes :
-`sujets` (concepts et projets, `est_projet`), `taches`, `suivi`, `perso`, `rendez_vous`
+`sujets` (`nature` : `concept` / `projet` / `action`), `taches` (`en_cours`), `suivi` (étapes terminées seulement), `perso`, `rendez_vous`
 (texte, date, heure). Écriture, toujours
 en ajout dans une section de niveau 1 (créée si absente) :
 
@@ -101,6 +101,10 @@ en ajout dans une section de niveau 1 (créée si absente) :
 | logistique / infos perso | `- HH:MM …` dans `* Journal` de `daily/AAAA-MM-JJ.org` |
 | rendez-vous daté | `- <AAAA-MM-JJ Ddd HH:MM> …` dans `* Agenda` de la note du **jour du rendez-vous** + mention `Rendez-vous le …` dans `* Journal` du jour de la dictée (même ligne déjà présente → rien) ; sans date valable → simple info perso |
 
+Actions (`zettel/tri_sujets.py`) : un sujet classé `action`, ou dont le titre commence par un
+verbe de `VERBES_ACTION` (« Migrer… », accents ignorés), devient une tâche rattachée au premier
+projet (sinon concept) de l'entrée, pas une note ; jamais si une note porte déjà ce titre.
+Tâche `en_cours` (« je suis en train de… ») → mot-clé `MOT_EN_COURS` (`STRT`) au lieu de `TODO`.
 Garde-fous dans le code : date `AAAA-MM-JJ` vérifiée (d'un mois avant à deux ans après la
 dictée, sinon tâche gardée sans date) → `SCHEDULED:` ou `DEADLINE:` ; chaque nouveau TODO
 reçoit `:PROPERTIES:` / `:CREATED:  [AAAA-MM-JJ Ddd HH:MM]` / `:END:` (après la planification) ; TODO déjà présent
@@ -173,7 +177,7 @@ la config Doom ne redéfinissant pas `org-todo-keywords`.
 `zettel/cli_valider.py` = celui de `zettel-valider`. Paquet `zettel/` :
 `config.py` (tous les réglages, lus via `cfg.NOM`), `ollama.py`, `whisper.py`, `index.py`,
 `journal.py`, `dates.py` (dates en français, horodatages Org), `ecriture.py`, `relecture.py` (worktree + `LotCommit`), `contexte.py`,
-`contenu.py` (entrées ordinaires), `pipeline.py`, `rapport.py`, `verrou.py`, `taches/`
+`contenu.py` (entrées ordinaires), `tri_sujets.py` (actions → tâches), `pipeline.py`, `rapport.py`, `verrou.py`, `taches/`
 (une tâche par module, + `base.py`, `agenda.py` = lecture datée de la base, `jour.py` =
 journée demandée et mise en forme).
 Tests : `python -m pytest` à la racine du dépôt (faux LLM, fichiers et dépôt git
@@ -250,7 +254,7 @@ de ligne `import-environment` dans Hyprland.
 ## État / à faire
 
 - En service avec le vrai Qwen (Ollama `ollama-cuda` 0.40) ; tests : `python -m pytest` à la
-  racine (faux LLM, fichiers et dépôts git temporaires). Paquet en 0.4.0 (bilan / préparation de
+  racine (faux LLM, fichiers et dépôts git temporaires). Paquet en 0.4.1 (actions → tâches, `STRT` ; 0.4.0 : bilan / préparation de
   journée, rendez-vous datés, `:CREATED:` ; 0.3.0 : `zettel-ai-vocal`, verrou, `--sortie`), `zettel-ai-vocal` pas encore essayé avec le vrai hyprwhspr.
 - Langue des notes : **français** (notes anglaises traduites le 2026-11-01, anciens titres
   gardés en alias).

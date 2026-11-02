@@ -24,6 +24,10 @@ think = false              # true : Qwen « réfléchit » avant de décider (me
 [notes]
 notes_proches = 10         # notes proches montrées à Qwen pour chaque sujet
 max_liens = 5              # liens au plus par note créée ou complétée
+# Titre de sujet commençant par l'un de ces verbes = une action : tâche au lieu d'une note.
+# S'AJOUTENT à la liste intégrée (migrer, installer, configurer, ajouter, remplacer…).
+verbes_action = []
+# ex. verbes_action = ["refaire", "brancher"]
 
 [transcription]
 # S'AJOUTENT à la liste intégrée (écosystème Hyprland, hyprwhspr, Emacs/Org, tes projets).
@@ -42,6 +46,7 @@ noms_propres = []
 mots_ouverts = ["TODO", "PROJ", "LOOP", "STRT", "WAIT", "HOLD", "IDEA", "NEXT", "WAITING", "STARTED"]
 mot_fait = "DONE"          # posé par « marquer_fait »
 mot_abandon = "KILL"       # posé pour une tâche abandonnée
+mot_en_cours = "STRT"      # tâche dictée comme déjà commencée (« je suis en train de… »)
 
 [git]
 branche_principale = "main"     # jamais modifiée par zettel-ai (seulement par zettel-valider)

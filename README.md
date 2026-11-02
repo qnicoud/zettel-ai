@@ -75,7 +75,7 @@ note existante est cité mot pour mot. Qwen n'écrit que du texte simple.
 
 | Élément extrait | Destination |
 |---|---|
-| tâche liée à un projet | `** TODO …` dans `* Tâches` de la note du projet |
+| tâche liée à un projet | `** TODO …` (`** STRT …` si déjà commencée) dans `* Tâches` de la note du projet |
 | tâche sans projet | `** TODO …` dans `* Tâches` de `daily/AAAA-MM-JJ.org` |
 | avancement d'un projet | `- [AAAA-MM-JJ] …` dans `* Suivi` de la note du projet |
 | logistique, infos perso | `- HH:MM …` dans `* Journal` de `daily/AAAA-MM-JJ.org` |
@@ -333,6 +333,7 @@ Les tests n'appellent jamais Ollama. Organisation du paquet `zettel/` :
 | `journal.py`, `index.py` | découpage du journal, index et embeddings des notes |
 | `pipeline.py`, `contenu.py`, `contexte.py` | traitement des entrées ordinaires |
 | `ecriture.py`, `suivi.py` | écriture des notes, tâches et notes journalières |
+| `tri_sujets.py` | sujets qui sont des actions (« Migrer X vers Y ») → tâches au lieu de notes |
 | `relecture.py` | worktree, commits par lot |
 | `rapport.py` | rapport org et notification |
 | `verrou.py` | un seul traitement à la fois |

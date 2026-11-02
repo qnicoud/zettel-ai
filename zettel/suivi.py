@@ -1,6 +1,6 @@
 """Tâches (TODO), suivi de projet et notes journalières (org-roam-dailies).
 
-- tâche liée à un projet  -> « ** TODO » dans la section « * Tâches » de la note du projet
+- tâche liée à un projet  -> « ** TODO » (« ** STRT » si déjà commencée) dans la section « * Tâches » de la note du projet
 - tâche sans projet        -> « ** TODO » dans « * Tâches » de la note du jour
 - avancement d'un projet   -> « - [AAAA-MM-JJ] … » dans « * Suivi » de la note du projet
 - logistique / infos perso -> « - HH:MM … » dans « * Journal » de la note du jour
@@ -34,10 +34,11 @@ def date_valide(texte: str, ref: date) -> date | None:
 def lignes_todo(t: dict, quand: datetime) -> list[str]:
     """Titre, date prévue ou limite (ligne de planification), puis date de création dans un
     tiroir :CREATED: (convention Org) : le bilan d'une journée retrouve les tâches créées."""
-    lignes = [f"** TODO {t['texte'].strip().rstrip('.').strip()}"]
+    mot = cfg.MOT_EN_COURS if t.get("en_cours") else "TODO"
+    lignes = [f"** {mot} {t['texte'].strip().rstrip('.').strip()}"]
     if (d := date_valide(t.get("date", ""), quand.date())):
-        mot = "DEADLINE" if t.get("date_limite") else "SCHEDULED"
-        lignes.append(f"{mot}: {horodatage_actif(d)}")
+        planif = "DEADLINE" if t.get("date_limite") else "SCHEDULED"
+        lignes.append(f"{planif}: {horodatage_actif(d)}")
     return [*lignes, ":PROPERTIES:", f":CREATED:  {horodatage_inactif(quand)}", ":END:"]
 
 
@@ -104,9 +105,10 @@ def appliquer_taches(taches: list[dict], ctx: Contexte) -> list[str]:
             continue
         lignes = lignes_todo(t, ctx.quand)
         planning = lignes[1] if lignes[1].startswith(("SCHEDULED:", "DEADLINE:")) else ""
-        print(f"  ☐ TODO « {texte} » → {ou}" + (f"  {planning}" if planning else ""))
+        mot = lignes[0].split()[1]
+        print(f"  ☐ {mot} « {texte} » → {ou}" + (f"  {planning}" if planning else ""))
         ajouter(path, "Tâches", lignes, ctx, f"☐ {texte} ({ou})")
-        actions.append(f"☐ TODO {texte} ({ou})" + (f", {planning}" if planning else ""))
+        actions.append(f"☐ {mot} {texte} ({ou})" + (f", {planning}" if planning else ""))
     return actions
 
 

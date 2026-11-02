@@ -7,7 +7,7 @@
 # Maintainer: Quentin Nicoud
 
 pkgname=zettel-ai
-pkgver=0.4.0
+pkgver=0.4.1
 pkgrel=1
 pkgdesc="Journal vocal dicté -> notes Zettelkasten org-roam, avec un LLM local (Ollama)"
 arch=('any')

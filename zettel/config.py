@@ -28,6 +28,14 @@ THINK = False                # True = Qwen « réfléchit » avant de décider :
 # --- Notes depuis le journal -----------------------------------------------
 TOP_K = 10                   # nb de notes proches montrées à Qwen pour chaque sujet
 MAX_LIENS = 5
+# Un sujet dont le titre commence par l'un de ces verbes est une ACTION : il devient une tâche
+# (rattachée au projet ou au sujet de l'entrée), pas une note. Accents et casse ignorés.
+VERBES_ACTION = (
+    "acheter", "ajouter", "appeler", "automatiser", "changer", "configurer", "convertir",
+    "corriger", "déplacer", "déployer", "écrire", "faire", "finir", "installer", "lancer",
+    "mettre", "migrer", "monter", "nettoyer", "passer", "préparer", "remplacer", "renommer",
+    "réparer", "sauvegarder", "supprimer", "terminer", "tester", "transférer", "vérifier",
+)
 
 # --- Tâches (« Instruction : … » ou prompt direct) -------------------------
 TOP_K_INSTRUCTION = 15       # notes candidates pour trouver la note source d'un remaniement
@@ -41,6 +49,7 @@ MAX_CARACTERES_BILAN = 8000  # dictées + journal du jour envoyés pour le résu
 TODO_OUVERTS = ("TODO", "PROJ", "LOOP", "STRT", "WAIT", "HOLD", "IDEA",
                 "NEXT", "WAITING", "STARTED")
 MOT_FAIT = "DONE"            # état posé par « marquer_fait »
+MOT_EN_COURS = "STRT"        # tâche dictée comme déjà commencée (« je suis en train de… »)
 MOT_ABANDON = "KILL"         # état posé pour une tâche abandonnée (Doom : KILL)
 
 # --- Transcription (Whisper) ------------------------------------------------
@@ -60,6 +69,9 @@ NOMS_PROPRES = (
     # Projets et outils
     "HyperBinds", "DM Gym", "Claude Code", "Ollama", "Qwen", "Kotlin", "Rust", "GTK4",
     "Raspberry Pi",
+    # Serveur maison (cluster Kubernetes)
+    "Kubernetes", "MetalLB", "Gateway API", "ingress-nginx", "Pi-hole", "Forgejo", "Grafana",
+    "Home Assistant", "MQTT", "ESP32",
 )
 # Erreurs de transcription fréquentes, corrigées dans le texte AVANT Qwen
 # (mot entier, casse ignorée). Ajoute ici celles que tu repères.
@@ -84,6 +96,10 @@ CORRECTIONS_TRANSCRIPTION = {
     "org agenda": "org-agenda", "org capture": "org-capture", "org babel": "org-babel",
     # Divers
     "Cloud Code": "Claude Code",
+    # Serveur maison
+    "Forge.io": "Forgejo", "Forge IO": "Forgejo", "Forge Jo": "Forgejo", "Forgejo.io": "Forgejo",
+    "P-Hole": "Pi-hole", "P Hole": "Pi-hole", "Pi Hole": "Pi-hole", "pihole": "Pi-hole",
+    "Metal LB": "MetalLB", "Metal Elbe": "MetalLB",
 }
 
 # --- Git : branche de relecture ---------------------------------------------

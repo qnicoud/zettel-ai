@@ -6,11 +6,17 @@ import uuid
 
 from . import config as cfg
 from .contexte import Contexte
-from .ecriture import (completer_note, creer_note, lier_mentions, nettoyer_contenu,
-                       nettoyer_liens_texte)
+from .ecriture import (
+    completer_note,
+    creer_note,
+    lier_mentions,
+    nettoyer_contenu,
+    nettoyer_liens_texte,
+)
 from .index import Note, meme_titre, plus_proches, titres_existants
 from .ollama import embed, llm
 from .suivi import appliquer_suivi
+from .tri_sujets import NATURES, est_projet, nature, separer_actions
 
 PROMPT_EXTRACTION = """Tu analyses une entrée de mon journal intime, dictée puis transcrite
 automatiquement (fautes, hésitations et répétitions possibles), pour alimenter ma base org-roam.
@@ -28,20 +34,28 @@ Range ce qu'elle contient dans cinq listes.
      n'est PAS un sujet : nomme-le dans le contenu du sujet principal (le lien vers sa
      note éventuelle sera ajouté ensuite).
    - titre = NOM du concept ou du projet, 1 à 4 mots (« Rust », « Hyprbinds »), jamais une
-     phrase. S'il existe déjà une note sur ce sujet (liste fournie), reprends EXACTEMENT son titre.
+     phrase ni un verbe. S'il existe déjà une note sur ce sujet (liste fournie), reprends
+     EXACTEMENT son titre.
+   - Une ACTION (migrer, installer, configurer, remplacer… : « Migrer X vers Y ») n'est JAMAIS
+     un sujet : c'est une tâche du projet ou du sujet concerné (liste 2).
    - contenu = les informations sur le sujet, reformulées clairement, autonomes, en
      français. Pour un projet : but, technologies, état actuel (les choses à faire vont dans
      taches, pas ici).
-   - est_projet = true pour un projet personnel, false sinon.
-2. taches : ce que j'ai à faire (« je dois », « il faut que », « il faudrait ajouter »…),
+   - nature = "projet" pour un projet personnel (ou mon installation : serveur, cluster…),
+     "concept" pour tout le reste, "action" si c'est en fait une chose à faire (elle sera
+     alors traitée comme une tâche : mets-la plutôt directement dans taches).
+2. taches : ce que j'ai à faire (« je dois », « il faut que », « il faudrait ajouter »…) OU
+   que je suis en train de faire (« je suis en train de », « je commence à », « je vais »),
    en action courte à l'infinitif, 10 mots au plus (« Ajouter la connexion à un agent »).
+   - en_cours = true si j'ai déjà commencé (« je suis en train de migrer… »), false sinon.
    - projet = titre du projet concerné (un sujet ci-dessus ou une note existante), vide sinon.
    - date = AAAA-MM-JJ UNIQUEMENT si l'entrée mentionne un moment (« demain », « vendredi »,
      « avant la fin du mois » : calcule-le à partir de la date de la dictée). Si aucun moment
      n'est mentionné, date = "" : ne mets JAMAIS la date de la dictée par défaut.
    - date_limite = true pour une échéance (« avant », « au plus tard »), false pour le jour prévu.
-3. suivi : ce qui s'est passé sur un projet (une étape franchie), une phrase courte
-   (« Première version installée sur le téléphone »), avec projet = titre du projet.
+3. suivi : une étape TERMINÉE d'un projet (« Première version installée sur le téléphone »),
+   une phrase courte, avec projet = titre du projet. Ce qui est en cours ou à faire va dans
+   taches, jamais ici.
 4. perso : MA vie hors projets et hors sujets : démarches, santé, famille, événements,
    nouvelles. Une phrase courte chacune, qui dit précisément quoi : n'écris JAMAIS d'élément
    vague (« événement non spécifié ») ; s'il n'y a rien de précis, liste vide.
@@ -63,10 +77,12 @@ N'invente rien. Pour le reste, dans le doute, GARDE l'information : tout est rel
 Exemple, dictée le 2026-03-10 : « Hier soir j'ai écrit un script Bash, photo-backup, qui
 copie mes photos sur le NAS chaque nuit ; ça marche, il faudra ajouter le chiffrement avant
 la fin du mois. Et je dois appeler le garage demain, la voiture fait un bruit bizarre.
-Dentiste jeudi à 9 h. »
--> sujets : « photo-backup » (est_projet, but, Bash, fonctionne) ;
+Dentiste jeudi à 9 h. Sur mon serveur maison, je suis en train de remplacer Docker par
+Podman. »
+-> sujets : « photo-backup » (projet : but, Bash, fonctionne) ;
    taches : « Ajouter le chiffrement » (projet photo-backup, 2026-03-31, date_limite),
-            « Appeler le garage » (sans projet, 2026-03-11) ;
+            « Appeler le garage » (sans projet, 2026-03-11),
+            « Remplacer Docker par Podman » (projet Serveur maison, en_cours) ;
    suivi : photo-backup « Script écrit, il fonctionne » ;
    perso : « La voiture fait un bruit bizarre » ;
    rendez_vous : « Dentiste » (2026-03-12, 09:00).
@@ -116,8 +132,8 @@ SCHEMA_SUJETS = {
             "items": {
                 "type": "object",
                 "properties": {"titre": {"type": "string"}, "contenu": {"type": "string"},
-                               "est_projet": {"type": "boolean"}},
-                "required": ["titre", "contenu", "est_projet"],
+                               "nature": {"type": "string", "enum": list(NATURES)}},
+                "required": ["titre", "contenu", "nature"],
             },
         },
         "taches": {
@@ -125,8 +141,9 @@ SCHEMA_SUJETS = {
             "items": {
                 "type": "object",
                 "properties": {"texte": {"type": "string"}, "projet": {"type": "string"},
-                               "date": {"type": "string"}, "date_limite": {"type": "boolean"}},
-                "required": ["texte", "projet", "date", "date_limite"],
+                               "date": {"type": "string"}, "date_limite": {"type": "boolean"},
+                               "en_cours": {"type": "boolean"}},
+                "required": ["texte", "projet", "date", "date_limite", "en_cours"],
             },
         },
         "suivi": {
@@ -212,8 +229,10 @@ def fusionner_sujets(sujets: list[dict]) -> list[dict]:
         cle = s["titre"].strip().lower()
         if cle in par_titre:
             p = par_titre[cle]
+            natures = {nature(p), nature(s)}
+            n = next(x for x in ("projet", "concept", "action") if x in natures)
             par_titre[cle] = {**p, "contenu": f"{p['contenu'].strip()}\n\n{s['contenu'].strip()}",
-                              "est_projet": p.get("est_projet") or s.get("est_projet")}
+                              "nature": n}
         else:
             par_titre[cle] = s
     return list(par_titre.values())
@@ -227,7 +246,11 @@ def traiter_entree(texte: str, ctx: Contexte) -> list[str]:
             f"Titres des notes existantes :\n{titres_existants(ctx.notes)}\n\n"
             f"Entrée du journal :\n\n{texte}")
     r = llm(PROMPT_EXTRACTION, user, SCHEMA_SUJETS)
-    sujets = fusionner_sujets(r["sujets"])
+    sujets, taches, converties = separer_actions(fusionner_sujets(r["sujets"]),
+                                                 r.get("taches", []), ctx.ids)
+    for titre in converties:
+        print(f"  (« {titre} » est une action : tâche au lieu d'une note)")
+    r = {**r, "taches": taches}
     print(f"  {len(sujets)} sujet(s) : {', '.join(s['titre'] for s in sujets) or '-'}"
           f" | {len(r.get('taches', []))} tâche(s), {len(r.get('suivi', []))} suivi(s),"
           f" {len(r.get('perso', []))} info(s) perso, {len(r.get('rendez_vous', []))} rendez-vous")
@@ -235,7 +258,7 @@ def traiter_entree(texte: str, ctx: Contexte) -> list[str]:
     for sujet in sujets:     # d'abord les sujets : les tâches peuvent viser un projet créé ici
         vec = embed([f"{sujet['titre']}. {sujet['contenu']}"])[0]
         d = valider(decider(sujet, plus_proches(vec, ctx.notes, cfg.TOP_K)), ctx.ids)
-        if sujet.get("est_projet") and "projet" not in d["tags"]:
+        if est_projet(sujet) and "projet" not in d["tags"]:
             d = {**d, "tags": ["projet", *d["tags"]]}
         if (ligne := appliquer(d, vec, ctx)):
             actions.append(ligne)
