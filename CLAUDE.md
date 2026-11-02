@@ -19,7 +19,7 @@ Je valide moi-même tout ce que le script produit avant que ça arrive sur `main
 
 | Quoi | Où |
 |---|---|
-| Journal dicté (entrée) | `~/Documents/journal-dictee.md` (une ligne `- [AAAA-MM-JJ HH:MM:SS] …` par dictée) |
+| Journaux dictés (entrée) | `~/Documents/journal-dictee.md` (une ligne `- [AAAA-MM-JJ HH:MM:SS] …` par dictée) ; réglage `JOURNAUX` / `chemins.journaux` = liste, fusion chronologique, absent → ignoré avec avertissement. **Jamais dans la base** (données brutes perso, poussée sur GitHub) |
 | Base org-roam (dépôt git) | `~/bin/git-repos-personal/org-roam-database/` |
 | État du script + cache embeddings | `~/.local/state/zettel_ai/` |
 | Rapports des runs du journal | `~/.local/state/zettel_ai/rapports/*.org` |
@@ -88,8 +88,9 @@ prend que des décisions encadrées, validées avant écriture.
 
 #### Tâches, suivi de projet, logistique (`zettel/suivi.py`)
 
-L'extraction (un seul appel Qwen, avec la date de la dictée) renvoie quatre listes :
-`sujets` (concepts et projets, `est_projet`), `taches`, `suivi`, `perso`. Écriture, toujours
+L'extraction (un seul appel Qwen, avec la date de la dictée) renvoie cinq listes :
+`sujets` (concepts et projets, `est_projet`), `taches`, `suivi`, `perso`, `rendez_vous`
+(texte, date, heure). Écriture, toujours
 en ajout dans une section de niveau 1 (créée si absente) :
 
 | Élément | Destination |
@@ -98,9 +99,11 @@ en ajout dans une section de niveau 1 (créée si absente) :
 | tâche sans projet | `** TODO …` dans `* Tâches` de `daily/AAAA-MM-JJ.org` |
 | avancement d'un projet | `- [AAAA-MM-JJ] …` dans `* Suivi` de la note du projet |
 | logistique / infos perso | `- HH:MM …` dans `* Journal` de `daily/AAAA-MM-JJ.org` |
+| rendez-vous daté | `- <AAAA-MM-JJ Ddd HH:MM> …` dans `* Agenda` de la note du **jour du rendez-vous** + mention `Rendez-vous le …` dans `* Journal` du jour de la dictée (même ligne déjà présente → rien) ; sans date valable → simple info perso |
 
 Garde-fous dans le code : date `AAAA-MM-JJ` vérifiée (d'un mois avant à deux ans après la
-dictée, sinon tâche gardée sans date) → `SCHEDULED:` ou `DEADLINE:` ; TODO déjà présent
+dictée, sinon tâche gardée sans date) → `SCHEDULED:` ou `DEADLINE:` ; chaque nouveau TODO
+reçoit `:PROPERTIES:` / `:CREATED:  [AAAA-MM-JJ Ddd HH:MM]` / `:END:` (après la planification) ; TODO déjà présent
 (même texte, quel que soit l'état) non répété ; sujets de même titre fusionnés ; infos perso
 qui citent un sujet/projet de l'entrée retirées. Les notes journalières (format
 org-roam-dailies par défaut) sont exclues de l'index des concepts.
@@ -124,13 +127,33 @@ bge-m3 sert à retrouver les notes, pas à router (il n'extrait pas les paramèt
 | `marquer_fait` | Qwen désigne des numéros dans la liste des todos ouverts ; le script passe le mot-clé à `DONE` (ou `KILL` si abandon, ou les mots-clés `#+TODO:` du fichier) et ajoute `CLOSED: [...]` (comme `org-log-done 'time`) | oui |
 | `lister_todos` | lecture déterministe des titres org (`#+TODO:` respecté, sinon `TODO_OUVERTS`), échéance `DEADLINE`/`SCHEDULED` ; Qwen ne fait que filtrer par sujet (numéros validés) | non |
 | `resumer` | bge-m3 → 6 notes les plus proches, Qwen résume **uniquement** à partir d'elles ; seules les notes réellement fournies sont citées | non |
+| `bilan_journee` | journée J passée : lecture déterministe (`taches/agenda.py`) des rendez-vous (horodatages actifs `<J …>` hors planification), `* Journal` de `daily/J.org`, todos créés (`:CREATED:` = J, ou dans `daily/J.org`), prévus/à rendre J, `CLOSED` J, notes dont `* Source` cite une dictée de J (créée/complétée), `* Suivi` `[J]` ; Qwen ne rédige que le résumé, à partir des dictées brutes de J (hors consignes) et du journal du jour | non |
+| `preparer_journee` | journée J à venir : rendez-vous, todos ouverts prévus J, à rendre J, en retard (échéance < J), `* Journal` de `daily/J.org`, autres todos ouverts ; aucun LLM | non |
+
+Journée demandée (`taches/jour.py`) : `zettel/dates.py` reconnaît « aujourd'hui », « hier »,
+« demain », jours de semaine (± « dernier »/« prochain » ; sinon prochain pour la préparation,
+dernier pour le bilan), « 3 novembre », « 5/11 », ISO, « dans / il y a N jours », par rapport
+à `ctx.quand` ; sinon Qwen propose AAAA-MM-JJ ("" = le jour même), refus au-delà de
+`ECART_MAX_JOURNEE` (730 j).
 
 Ajouter une tâche : un module dans `zettel/taches/` qui expose `TACHE = Tache(nom,
 description, executer, ecrit)`, puis l'inscrire dans `TACHES` (`zettel/taches/__init__.py`).
 
 **Sorties** : en mode journal, toutes les actions et résultats sont réunis dans
 `~/.local/state/zettel_ai/rapports/AAAA-MM-JJ_HHMMSS.org` + notification `notify-send`
-(rien si le run n'a rien produit, ni en `--dry-run`). En prompt direct : affichage console.
+(rien si le run n'a rien produit, ni en `--dry-run`). En prompt direct : affichage console,
+`--sortie FICHIER.org` écrit en plus le résultat seul (titre, `Tâche : nom`, résultat), et une
+tâche qui écrit envoie une notification cliquable vers `zettel-valider`.
+
+**Consigne vocale** : `zettel-ai-vocal` (bash, bascule comme `hyprwhspr-journal`, installé dans
+`/usr/bin`) → `hyprwhspr record capture` → `zettel-ai --sortie
+rapports/AAAA-MM-JJ_HHMMSS-demande.org -- "$texte"` → affichage `emacsclient -c` (si serveur),
+sinon `zenity --text-info`, sinon notification. Log : `$XDG_RUNTIME_DIR/zettel-ai-vocal.log`.
+Raccourci Hyprland géré par l'utilisateur.
+
+**Verrou** (`zettel/verrou.py`) : `flock` non bloquant sur `STATE_DIR/zettel-ai.lock` autour de
+tout traitement (timer, verrouillage de session, consigne vocale) ; déjà pris → message sur
+stderr et code 75 (`CODE_DEJA_EN_COURS`, reconnu par `zettel-ai-vocal`). `--lister` n'en prend pas.
 
 Options : `--dry-run` (affiche les décisions et le contenu proposé sans écrire ; les créations sont simulées
 en mémoire pour que les entrées suivantes puissent les compléter), `--force` (retraite toutes les entrées),
@@ -144,13 +167,15 @@ Whisper dans le texte avant Qwen (« HyperCTL » → hyprctl, « Cloud Code » �
 Mots-clés TODO par défaut = ceux de Doom (`TODO PROJ LOOP STRT WAIT HOLD IDEA | DONE KILL`),
 la config Doom ne redéfinissant pas `org-todo-keywords`.
 
-#### Organisation du code (`journal-assistant/`)
+#### Organisation du code
 
 `zettel/cli.py` = point d'entrée de `zettel-ai` (CLI, hyprwhspr, `finally`),
 `zettel/cli_valider.py` = celui de `zettel-valider`. Paquet `zettel/` :
 `config.py` (tous les réglages, lus via `cfg.NOM`), `ollama.py`, `whisper.py`, `index.py`,
-`journal.py`, `ecriture.py`, `relecture.py` (worktree + `LotCommit`), `contexte.py`,
-`contenu.py` (entrées ordinaires), `pipeline.py`, `rapport.py`, `taches/`.
+`journal.py`, `dates.py` (dates en français, horodatages Org), `ecriture.py`, `relecture.py` (worktree + `LotCommit`), `contexte.py`,
+`contenu.py` (entrées ordinaires), `pipeline.py`, `rapport.py`, `verrou.py`, `taches/`
+(une tâche par module, + `base.py`, `agenda.py` = lecture datée de la base, `jour.py` =
+journée demandée et mise en forme).
 Tests : `python -m pytest` à la racine du dépôt (faux LLM, fichiers et dépôt git
 temporaires ; aucun appel à Ollama).
 
@@ -189,7 +214,8 @@ Puis `M-x org-roam-db-sync` dans Emacs.
 
 `pyproject.toml` (setuptools) déclare les commandes `zettel-ai` et `zettel-valider` ;
 `packaging/PKGBUILD` construit le paquet depuis le dépôt (sources non commitées comprises),
-lance les tests dans `check()` et installe aussi `/usr/bin/hyprwhspr-journal` et les unités
+lance les tests dans `check()` et installe aussi `/usr/bin/hyprwhspr-journal`,
+`/usr/bin/zettel-ai-vocal` et les unités
 systemd utilisateur :
 
 ```bash
@@ -223,8 +249,9 @@ de ligne `import-environment` dans Hyprland.
 
 ## État / à faire
 
-- En service avec le vrai Qwen (Ollama `ollama-cuda` 0.40) ; tests : `cd journal-assistant &&
-  python -m pytest tests` (faux LLM, fichiers et dépôts git temporaires).
+- En service avec le vrai Qwen (Ollama `ollama-cuda` 0.40) ; tests : `python -m pytest` à la
+  racine (faux LLM, fichiers et dépôts git temporaires). Paquet en 0.4.0 (bilan / préparation de
+  journée, rendez-vous datés, `:CREATED:` ; 0.3.0 : `zettel-ai-vocal`, verrou, `--sortie`), `zettel-ai-vocal` pas encore essayé avec le vrai hyprwhspr.
 - Langue des notes : **français** (notes anglaises traduites le 2026-11-01, anciens titres
   gardés en alias).
 - Idées en attente : filtre des dictées de test (mots-clés) ; filtre des sujets vides

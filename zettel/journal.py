@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from datetime import datetime
+from pathlib import Path
 
 from . import config as cfg
 
@@ -17,6 +18,35 @@ RE_INSTRUCTION = re.compile(r"^\s*instructions?\b\s*[:,.;–-]?\s*", re.I)
 
 def entrees_journal(texte: str) -> list[str]:
     return [b.strip() for b in RE_DEBUT_ENTREE.split(texte) if b.strip()]
+
+
+def chemins_journaux() -> tuple[Path, ...]:
+    """JOURNAUX, les chemins relatifs étant pris depuis la base org-roam."""
+    return tuple(p if p.is_absolute() else cfg.ROAM_DIR / p for p in cfg.JOURNAUX)
+
+
+def lire_journaux(chemins: tuple[Path, ...]) -> tuple[list[str], list[Path]]:
+    """Entrées de tous les journaux existants, par ordre chronologique (tri stable : une
+    entrée sans horodatage, à titre #, passe après les entrées datées), et journaux absents."""
+    entrees: list[str] = []
+    absents: list[Path] = []
+    for chemin in chemins:
+        if chemin.is_file():
+            entrees.extend(entrees_journal(chemin.read_text(encoding="utf-8")))
+        else:
+            absents.append(chemin)
+    return sorted(entrees, key=lambda e: date_entree(e) or datetime.max), absents
+
+
+def horodatages_en_double(entrees: list[str]) -> list[str]:
+    """Horodatages portés par plusieurs entrées. Elles partagent la même clé d'état
+    (`horodatage:…`) : une fois l'une traitée, l'autre passe aussi pour traitée."""
+    vus: dict[str, int] = {}
+    for e in entrees:
+        m = RE_HORODATAGE.match(e)
+        if m:
+            vus[m.group(1).strip()] = vus.get(m.group(1).strip(), 0) + 1
+    return [h for h, n in vus.items() if n > 1]
 
 
 def source_entree(entree: str) -> str:

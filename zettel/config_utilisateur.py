@@ -62,6 +62,12 @@ def _chemin(nom: str, v: Any) -> Path:
     return Path(_texte(nom, v)).expanduser()
 
 
+def _chemins(nom: str, v: Any) -> tuple[Path, ...]:
+    if not isinstance(v, list) or not v:
+        raise ErreurConfig(f"{nom} : liste non vide de chemins attendue, ex. [\"~/a.md\"]")
+    return tuple(_chemin(f"{nom}[{i}]", x) for i, x in enumerate(v))
+
+
 def _liste(nom: str, v: Any) -> tuple[str, ...]:
     if not isinstance(v, list):
         raise ErreurConfig(f"{nom} : liste de textes attendue, ex. [\"a\", \"b\"]")
@@ -92,7 +98,7 @@ Fusionner = Callable[[Any, Any], Any]
 
 # (section, clé) -> (attribut de zettel.config, conversion, fusion avec la valeur intégrée)
 SCHEMA: dict[tuple[str, str], tuple[str, Convertir, Fusionner]] = {
-    ("chemins", "journal"): ("JOURNAL", _chemin, _remplacer),
+    ("chemins", "journaux"): ("JOURNAUX", _chemins, _remplacer),
     ("chemins", "base_org_roam"): ("ROAM_DIR", _chemin, _remplacer),
     ("chemins", "dossier_journalier"): ("DAILY_DIR", _texte, _remplacer),
     ("ollama", "url"): ("OLLAMA_BASE", _url, _remplacer),

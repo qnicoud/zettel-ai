@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Consigne vocale pour zettel-ai, sans terminal (bascule, comme hyprwhspr-journal) :
+#   1er appui  -> démarre un enregistrement hyprwhspr en mode capture (rien n'est collé)
+#   2e appui   -> arrête l'enregistrement ; la transcription est passée à zettel-ai
+# Le résultat (liste de todos, résumé, compte rendu d'une modification) est écrit dans
+# ~/.local/state/zettel_ai/rapports/AAAA-MM-JJ_HHMMSS-demande.org puis ouvert dans Emacs
+# (emacsclient, si un serveur tourne), sinon dans zenity, sinon résumé en notification.
+# Une demande qui modifie la base est notifiée par zettel-ai (clic -> zettel-valider).
+#
+# Variables optionnelles :
+#   ZETTEL_AI_VOCAL_LANG  code langue forcé pour la transcription, ex. "fr"
+#   ZETTEL_AI             commande zettel-ai (défaut : zettel-ai du PATH)
+set -u
+
+HYPRWHSPR=/usr/bin/hyprwhspr
+ZETTEL="${ZETTEL_AI:-zettel-ai}"
+LANG_CODE="${ZETTEL_AI_VOCAL_LANG:-}"
+RAPPORTS="$HOME/.local/state/zettel_ai/rapports"
+RUNDIR="${XDG_RUNTIME_DIR:-/tmp}"
+LOCK="$RUNDIR/zettel-ai-vocal.lock"
+ERRLOG="$RUNDIR/zettel-ai-vocal.err"
+LOG="$RUNDIR/zettel-ai-vocal.log"
+CODE_DEJA_EN_COURS=75   # zettel-ai : un autre traitement tient le verrou
+
+notifier() {  # notifier URGENCE TITRE CORPS [ID à remplacer] -> affiche l'ID
+    local args=(-a zettel_ai -u "$1" -p)
+    [ -n "${4:-}" ] && args+=(-r "$4")
+    notify-send "${args[@]}" "$2" "$3" 2>/dev/null || true
+}
+
+emacs_disponible() {
+    command -v emacsclient >/dev/null && emacsclient -a false -e t >/dev/null 2>&1
+}
+
+afficher() {  # afficher FICHIER
+    if emacs_disponible; then
+        # Frame nommée « zettel-ai » : titre fixe, repérable par une règle Hyprland.
+        emacsclient -c -n -F '((name . "zettel-ai"))' "$1" >/dev/null 2>&1 && return
+    fi
+    if command -v zenity >/dev/null; then
+        zenity --text-info --title "zettel-ai" --width 900 --height 700 --filename "$1" \
+            >/dev/null 2>&1 &
+        return
+    fi
+    notifier normal "zettel-ai" "$(tail -n +3 "$1" | head -c 600)" >/dev/null
+}
+
+# Une capture est déjà en cours : ce 2e appui sert à l'arrêter.
+exec 9>"$LOCK"
+if ! flock -n 9; then
+    exec 9>&-
+    exec "$HYPRWHSPR" record stop
+fi
+
+lang_args=()
+[ -n "$LANG_CODE" ] && lang_args=(--lang "$LANG_CODE")
+
+# Bloque jusqu'à la fin de la transcription.
+texte="$("$HYPRWHSPR" record capture "${lang_args[@]}" 2>"$ERRLOG")"
+status=$?
+exec 9>&-   # capture finie : un nouvel appui pourra en démarrer une autre
+
+if [ "$status" -ne 0 ]; then
+    notifier critical "zettel-ai" "Échec de la capture : $(tail -n1 "$ERRLOG")" >/dev/null
+    exit "$status"
+fi
+if [ -z "${texte//[[:space:]]/}" ]; then
+    notifier low "zettel-ai" "Rien n'a été transcrit" >/dev/null
+    exit 0
+fi
+
+id=$(notifier low "zettel-ai : consigne en cours…" "« ${texte:0:200} »")
+sortie="$RAPPORTS/$(date '+%Y-%m-%d_%H%M%S')-demande.org"
+
+# « -- » : une transcription qui commence par « - » n'est pas prise pour une option.
+"$ZETTEL" --sortie "$sortie" -- "$texte" >"$LOG" 2>&1
+status=$?
+
+if [ "$status" -eq "$CODE_DEJA_EN_COURS" ]; then
+    notifier normal "zettel-ai" "Un traitement est déjà en cours : redemande plus tard." \
+        "$id" >/dev/null
+elif [ "$status" -ne 0 ] || [ ! -s "$sortie" ]; then
+    notifier critical "zettel-ai : échec" "$(tail -n1 "$LOG")
+Détails : $LOG" "$id" >/dev/null
+else
+    notifier low "zettel-ai : terminé" "$sortie" "$id" >/dev/null
+    afficher "$sortie"
+fi
+exit "$status"

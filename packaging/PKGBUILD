@@ -1,12 +1,13 @@
 # Paquet local de zettel-ai, construit depuis ce dépôt (les sources non commitées comprises).
 #   cd packaging && makepkg -si        # construit, lance les tests, installe
 # Installe : /usr/bin/zettel-ai, /usr/bin/zettel-valider, /usr/bin/hyprwhspr-journal,
+#            /usr/bin/zettel-ai-vocal (consigne vocale sans terminal),
 #            le paquet Python « zettel », les unités systemd utilisateur (inactives) et
 #            /usr/share/doc/zettel-ai/config.exemple.toml (modèle de ~/.config/zettel-ai/config.toml).
 # Maintainer: Quentin Nicoud
 
 pkgname=zettel-ai
-pkgver=0.2.0
+pkgver=0.4.0
 pkgrel=1
 pkgdesc="Journal vocal dicté -> notes Zettelkasten org-roam, avec un LLM local (Ollama)"
 arch=('any')
@@ -17,11 +18,12 @@ checkdepends=('python-pytest')
 optdepends=('ollama-cuda: LLM local (Qwen3.5-9B, bge-m3) ; ou ollama'
             'hyprwhspr: dictée vocale (coupée pendant le traitement)'
             'kitty: terminal ouvert par un clic sur la notification (réglage TERMINAL)'
-            'emacs: org-roam-db-sync après validation'
+            'emacs: org-roam-db-sync après validation, affichage des réponses de zettel-ai-vocal'
+            'zenity: affichage des réponses de zettel-ai-vocal sans Emacs'
             'curl: vérification d''Ollama par zettel-ai.service')
 
 _racine="$startdir/.."
-_sources=(pyproject.toml config.exemple.toml zettel tests systemd hyprwhspr-journal)
+_sources=(pyproject.toml config.exemple.toml zettel tests systemd hyprwhspr-journal zettel-ai-vocal)
 
 prepare() {
   # Copie neuve à chaque build : un fichier supprimé du dépôt ne doit pas survivre dans src/
@@ -46,7 +48,7 @@ check() {
 package() {
   cd "$pkgname"
   python -m installer --destdir="$pkgdir" dist/*.whl
-  install -Dm755 hyprwhspr-journal -t "$pkgdir/usr/bin/"
+  install -Dm755 hyprwhspr-journal zettel-ai-vocal -t "$pkgdir/usr/bin/"
   install -Dm644 systemd/zettel-ai.service systemd/zettel-ai.timer \
     -t "$pkgdir/usr/lib/systemd/user/"
   # Modèle de ~/.config/zettel-ai/config.toml

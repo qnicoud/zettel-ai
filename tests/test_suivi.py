@@ -9,7 +9,9 @@ from zettel import config as cfg
 from zettel.contenu import traiter_entree
 from zettel.index import est_journaliere
 from zettel.journal import date_entree
+from zettel.contenu import PROMPT_EXTRACTION, SCHEMA_SUJETS
 from zettel.suivi import date_valide, inserer_dans_section, lignes_todo, todo_existe
+from zettel.taches.marquer_fait import clore
 from zettel.taches.todos import todos_fichier
 
 QUAND = datetime(2026, 11, 1, 17, 9)       # un dimanche
@@ -33,13 +35,24 @@ def test_date_valide(texte, attendu):
     assert date_valide(texte, QUAND.date()) == attendu
 
 
+CREATED = [":PROPERTIES:", ":CREATED:  [2026-11-01 Sun 17:09]", ":END:"]
+
+
 def test_lignes_todo():
-    ref = QUAND.date()
-    assert lignes_todo({"texte": "Appeler", "date": "2026-11-02", "date_limite": False}, ref) == [
-        "** TODO Appeler", "SCHEDULED: <2026-11-02 Mon>"]
-    assert lignes_todo({"texte": "Rendre", "date": "2026-11-06", "date_limite": True}, ref)[1] \
+    assert lignes_todo({"texte": "Appeler", "date": "2026-11-02", "date_limite": False}, QUAND) \
+        == ["** TODO Appeler", "SCHEDULED: <2026-11-02 Mon>", *CREATED]
+    assert lignes_todo({"texte": "Rendre", "date": "2026-11-06", "date_limite": True}, QUAND)[1] \
         == "DEADLINE: <2026-11-06 Fri>"
-    assert lignes_todo({"texte": "Lire", "date": "bientôt"}, ref) == ["** TODO Lire"]
+    assert lignes_todo({"texte": "Lire", "date": "bientôt"}, QUAND) == ["** TODO Lire", *CREATED]
+
+
+def test_todo_cree_puis_clos(chemins):
+    """CLOSED se place sous le titre, avant le tiroir :CREATED:, comme dans org-mode."""
+    p = chemins / "t.org"
+    p.write_text("* Tâches\n" + "\n".join(lignes_todo({"texte": "Lire", "date": ""}, QUAND)) + "\n")
+    t = todos_fichier(p)[0]
+    assert clore(p.read_text().splitlines(), t, "DONE", datetime(2026, 11, 2, 9, 0)) == [
+        "* Tâches", "** DONE Lire", "CLOSED: [2026-11-02 Mon 09:00]", *CREATED]
 
 
 def test_inserer_dans_section():
@@ -141,3 +154,43 @@ def test_perso_en_doublon_d_un_sujet_retire():
          "perso": ["J'ai développé DM GYM ce week-end", "Le script photo-backup tourne",
                    "Rendez-vous chez le dentiste"]}
     assert filtrer_perso(r) == ["Rendez-vous chez le dentiste"]
+
+
+# --- rendez-vous datés ---------------------------------------------------------------------
+
+RDV = [{"texte": "Coiffeur, site du travail", "date": "2026-11-03", "heure": "13h30"},
+       {"texte": "Dîner chez Paul", "date": "", "heure": ""}]
+
+
+def test_schema_d_extraction_avec_rendez_vous():
+    assert "rendez_vous" in SCHEMA_SUJETS["required"]
+    assert "rendez_vous" in PROMPT_EXTRACTION
+
+
+def test_rendez_vous_date_dans_l_agenda_du_jour(faux_llm, chemins, ctx):
+    c = ctx()
+    c.quand = datetime(2026, 11, 2, 15, 27)
+    faux_llm.reponses = [reponse(rendez_vous=RDV)]
+    actions = traiter_entree("…", c)
+    assert any("Coiffeur" in a and "2026-11-03 à 13:30" in a for a in actions)
+
+    demain = (chemins / cfg.DAILY_DIR / "2026-11-03.org").read_text()
+    assert "#+title: 2026-11-03" in demain
+    assert "* Agenda\n- <2026-11-03 Tue 13:30> Coiffeur, site du travail\n" in demain
+    jour = (chemins / cfg.DAILY_DIR / "2026-11-02.org").read_text()
+    assert "- 15:27 Rendez-vous le 2026-11-03 à 13:30 : Coiffeur, site du travail" in jour
+    assert "- 15:27 Dîner chez Paul" in jour          # sans date : simple info perso
+
+    # même dictée retraitée : ni l'agenda ni le journal ne reçoivent de doublon
+    faux_llm.reponses = [reponse(rendez_vous=RDV[:1])]
+    traiter_entree("…", c)
+    assert (chemins / cfg.DAILY_DIR / "2026-11-03.org").read_text().count("Coiffeur") == 1
+    assert (chemins / cfg.DAILY_DIR / "2026-11-02.org").read_text().count("Coiffeur") == 1
+
+
+def test_rendez_vous_en_dry_run(faux_llm, chemins, ctx):
+    c = ctx(dry_run=True)
+    c.quand = datetime(2026, 11, 2, 15, 27)
+    faux_llm.reponses = [reponse(rendez_vous=RDV)]
+    assert any("Coiffeur" in a for a in traiter_entree("…", c))
+    assert not (chemins / cfg.DAILY_DIR).exists()

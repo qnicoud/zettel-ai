@@ -31,14 +31,14 @@ schéma, puis validées avant toute écriture (ID inconnus rejetés, pas d'auto-
 dictée (hyprwhspr-journal)
    │  - [AAAA-MM-JJ HH:MM:SS] texte…
    ▼
-~/Documents/journal-dictee.md
+~/Documents/journal-dictee.md   (+ autres journaux de chemins.journaux, fusion chronologique)
    │
    ▼  zettel-ai (à la main, ou timer systemd à 23:30)
 ┌───────────────────────────────────────────────────────────┐
 │ 1. découpe en entrées, saute celles déjà traitées         │
 │ 2. worktree de la branche zettel-ai ← fusion de main      │
 │ 3. index des notes .org + embeddings bge-m3 (en cache)    │
-│ 4. Qwen : sujets, tâches, suivi, infos perso              │
+│ 4. Qwen : sujets, tâches, suivi, infos perso, rendez-vous │
 │ 5. pour chaque sujet : 10 notes proches → Qwen décide     │
 │    créer / compléter / ignorer + liens                    │
 │ 6. validation par le script, puis écriture                │
@@ -79,9 +79,13 @@ note existante est cité mot pour mot. Qwen n'écrit que du texte simple.
 | tâche sans projet | `** TODO …` dans `* Tâches` de `daily/AAAA-MM-JJ.org` |
 | avancement d'un projet | `- [AAAA-MM-JJ] …` dans `* Suivi` de la note du projet |
 | logistique, infos perso | `- HH:MM …` dans `* Journal` de `daily/AAAA-MM-JJ.org` |
+| rendez-vous daté | `- <AAAA-MM-JJ Ddd HH:MM> …` dans `* Agenda` de la note du **jour du rendez-vous** (+ mention dans le journal du jour de la dictée) |
 
 Les dates d'échéance deviennent `SCHEDULED:` ou `DEADLINE:` si elles sont plausibles (d'un mois
-avant à deux ans après la dictée). Un TODO déjà présent n'est pas répété.
+avant à deux ans après la dictée). Un TODO déjà présent n'est pas répété. Chaque nouveau TODO
+porte sa date de création (`:CREATED:` dans un tiroir de propriétés), lue par `bilan_journee`.
+Les rendez-vous ont un horodatage actif : org-agenda les affiche si la base est dans
+`org-agenda-files`.
 
 ### Consignes
 
@@ -98,6 +102,8 @@ n'est fait.
 | `marquer_fait` | passe des TODO à `DONE` (ou `KILL`) avec `CLOSED: […]` | oui |
 | `lister_todos` | liste les tâches ouvertes, filtrées par sujet | non |
 | `resumer` | résume un sujet à partir des 6 notes les plus proches, en les citant | non |
+| `bilan_journee` | bilan d'une journée passée : résumé des dictées du jour (Qwen), rendez-vous, journal, tâches créées / prévues / terminées, notes créées ou complétées, suivi des projets | non |
+| `preparer_journee` | programme d'une journée : rendez-vous, tâches prévues, à rendre, en retard, journal du jour, autres tâches ouvertes (sans LLM) | non |
 
 Le mot « Instruction » sert de déclencheur obligatoire dans les dictées : une simple réflexion
 n'est jamais exécutée par erreur.
@@ -136,6 +142,7 @@ la wheel, lance les tests (un échec arrête le build) puis installe :
 | `/usr/bin/zettel-ai` | traitement du journal et consignes |
 | `/usr/bin/zettel-valider` | relecture des commits proposés |
 | `/usr/bin/hyprwhspr-journal` | dictée vers le journal (bascule démarrer / arrêter) |
+| `/usr/bin/zettel-ai-vocal` | consigne vocale, réponse affichée sans terminal (bascule) |
 | `/usr/lib/systemd/user/zettel-ai.{service,timer}` | traitement automatique, **inactif** par défaut |
 | `/usr/share/doc/zettel-ai/config.exemple.toml` | modèle de configuration commenté |
 
@@ -156,7 +163,7 @@ les clés sont facultatives. Une clé inconnue ou mal typée arrête le programm
 
 | Section | Contenu |
 |---|---|
-| `[chemins]` | journal dicté, base org-roam, dossier des notes journalières |
+| `[chemins]` | journaux dictés (liste, à garder hors de la base), base org-roam, dossier des notes journalières |
 | `[ollama]` | URL, modèles, contexte, température, `think` |
 | `[notes]` | nombre de notes proches montrées au LLM, nombre max de liens |
 | `[transcription]` | `noms_propres` et `[transcription.corrections]` (erreurs de Whisper), **ajoutés** aux valeurs intégrées |
@@ -167,10 +174,10 @@ les clés sont facultatives. Une clé inconnue ou mal typée arrête le programm
 
 ### Dictée
 
-Associe `hyprwhspr-journal` à un raccourci Hyprland, par exemple :
+Associe `hyprwhspr-journal` à un raccourci Hyprland, par exemple (config en Lua) :
 
-```ini
-bind = SUPER, J, exec, hyprwhspr-journal
+```lua
+hl.bind(mainMod .. " + <touche>", hl.dsp.exec_cmd("hyprwhspr-journal"), { description = "Dictée du journal." })
 ```
 
 Un premier appui démarre l'enregistrement, un second l'arrête. La transcription est ajoutée au
@@ -219,10 +226,40 @@ zettel-ai "liste mes todos Rust"
 zettel-ai "résume ce que je sais sur Hyprland"
 zettel-ai "renomme la note Emacs en Doom Emacs"
 zettel-ai "marque comme fait la tâche de mise à jour du PKGBUILD"
+zettel-ai "prépare ma journée de demain"
+zettel-ai "fais le bilan de jeudi dernier"
 ```
 
-Le résultat est affiché dans la console. Les consignes qui modifient la base passent par la
-même relecture que le reste.
+La journée d'un bilan ou d'une préparation est comprise par le code (« aujourd'hui », « hier »,
+« demain », « jeudi » / « jeudi dernier » / « jeudi prochain », « le 3 novembre », « 5/11 »,
+« dans 3 jours »…), par rapport à la date de la dictée ; sinon Qwen propose une date, vérifiée
+(deux ans au plus d'écart). Sans journée désignée : le jour même.
+
+Le résultat est affiché dans la console. Avec `--sortie FICHIER.org`, le résultat seul (sans les
+lignes de progression) est aussi écrit dans ce fichier. Les consignes qui modifient la base
+passent par la même relecture que le reste : une notification cliquable ouvre `zettel-valider`.
+
+### Consigne vocale, sans terminal
+
+`zettel-ai-vocal` s'associe à un raccourci, en bascule comme `hyprwhspr-journal` :
+
+1. un premier appui démarre l'enregistrement (`hyprwhspr record capture` : rien n'est collé) ;
+2. un second appui l'arrête, et une notification « consigne en cours… » s'affiche ;
+3. la transcription est passée à `zettel-ai --sortie …` ;
+4. la réponse s'ouvre dans Emacs (`emacsclient -c`, si un serveur tourne), sinon dans une
+   fenêtre `zenity`, sinon en notification. Les liens `[[file:…]]` et `[[id:…]]` ne se suivent
+   que dans Emacs.
+
+Les réponses sont gardées dans `~/.local/state/zettel_ai/rapports/AAAA-MM-JJ_HHMMSS-demande.org`
+et la sortie du dernier lancement dans `$XDG_RUNTIME_DIR/zettel-ai-vocal.log`. Pendant le
+traitement, hyprwhspr est coupé (VRAM) : une nouvelle dictée n'est possible qu'après la réponse.
+`ZETTEL_AI_VOCAL_LANG` (ex. `fr`) force la langue de transcription.
+
+Exemple de raccourci (config Hyprland en Lua) :
+
+```lua
+hl.bind(mainMod .. " + <touche>", hl.dsp.exec_cmd("zettel-ai-vocal"), { description = "Consigne vocale zettel-ai." })
+```
 
 ### Relire et valider
 
@@ -265,7 +302,7 @@ git -C ~/.local/state/zettel_ai/worktree reset --hard main   # tout refuser
 
 | Quoi | Où |
 |---|---|
-| Journal dicté | `~/Documents/journal-dictee.md` |
+| Journaux dictés | `~/Documents/journal-dictee.md` (réglage `chemins.journaux`) |
 | Configuration | `~/.config/zettel-ai/config.toml` |
 | Entrées traitées, cache des embeddings | `~/.local/state/zettel_ai/` |
 | Rapports des runs | `~/.local/state/zettel_ai/rapports/` |
@@ -277,6 +314,8 @@ Sécurités :
 - hyprwhspr est relancé dans tous les cas, y compris après une erreur ou un SIGTERM.
 - Les modèles sont déchargés d'Ollama à la fin du run.
 - Ce qui a déjà été écrit est commité même si le run s'interrompt.
+- Un seul traitement à la fois (verrou `~/.local/state/zettel_ai/zettel-ai.lock`) : un second
+  lancement s'arrête avec le code 75 (`--lister`, en lecture seule, reste possible).
 
 ## Développement
 
@@ -296,6 +335,7 @@ Les tests n'appellent jamais Ollama. Organisation du paquet `zettel/` :
 | `ecriture.py`, `suivi.py` | écriture des notes, tâches et notes journalières |
 | `relecture.py` | worktree, commits par lot |
 | `rapport.py` | rapport org et notification |
+| `verrou.py` | un seul traitement à la fois |
 | `taches/` | consignes (une tâche par module) |
 
 **Ajouter une consigne** : créer un module dans `zettel/taches/` qui expose

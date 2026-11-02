@@ -28,11 +28,11 @@ think = true
 temperature = 0.5
 contexte = 8192
 [chemins]
-journal = "~/journal.md"
+journaux = ["~/journal.md"]
 """))
     assert valeurs == {"OLLAMA_BASE": "http://serveur:11434", "THINK": True,
                        "TEMPERATURE": 0.5, "NUM_CTX": 8192,
-                       "JOURNAL": Path.home() / "journal.md"}
+                       "JOURNAUX": (Path.home() / "journal.md",)}
 
 
 def test_lire_ne_modifie_pas_la_config(tmp_path):

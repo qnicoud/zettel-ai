@@ -11,11 +11,12 @@ from zettel import config as cfg  # noqa: E402
 from zettel import contenu, index, suivi, taches  # noqa: E402
 from zettel.contexte import Contexte  # noqa: E402
 from zettel.index import lire_note  # noqa: E402
-from zettel.taches import (extraire, fusionner, lier, marquer_fait, renommer,  # noqa: E402
-                           resume, todos)
+from zettel.taches import (bilan, extraire, fusionner, jour, lier,  # noqa: E402
+                           marquer_fait, renommer, resume, todos)
 
 # Chaque module importe llm / embed par nom : il faut les remplacer partout.
-MODULES_LLM = (contenu, taches, extraire, todos, resume, fusionner, lier, renommer, marquer_fait)
+MODULES_LLM = (contenu, taches, extraire, todos, resume, fusionner, lier, renommer, marquer_fait,
+               bilan, jour)
 MODULES_EMBED = (index, contenu, suivi, extraire, todos, resume, fusionner, lier, renommer)
 
 
@@ -70,6 +71,49 @@ def ecrire_note(dossier: Path, nom: str, nid: str, titre: str, corps: str) -> Pa
     p.write_text(f":PROPERTIES:\n:ID:       {nid}\n:END:\n#+title: {titre}\n\n{corps}",
                  encoding="utf-8")
     return p
+
+
+PROJET_X = """Texte du projet.
+
+* Tâches
+** TODO Écrire la doc
+SCHEDULED: <2026-11-03 Tue>
+:PROPERTIES:
+:CREATED:  [2026-11-02 Mon 15:27]
+:END:
+** TODO Rendre le rapport
+DEADLINE: <2026-11-01 Sun>
+** DONE Installer
+CLOSED: [2026-11-02 Mon 10:00] SCHEDULED: <2026-11-01 Sun>
+** TODO Sans date
+
+* Suivi
+- [2026-11-02] Première version installée
+
+* Source
+- Journal dicté, 2026-11-02 15:27:49 (note créée le 2026-11-02)
+"""
+
+AUTRE = """Autre texte.
+
+* Source
+- Journal dicté, 2026-11-01 10:00:00 (note créée le 2026-11-01)
+- Journal dicté, 2026-11-02 09:00:00 (complément du 2026-11-02)
+"""
+
+
+def ecrire_journees(notes: Path) -> None:
+    """Petite base datée autour du lundi 2026-11-02 (bilan et préparation de journée)."""
+    ecrire_note(notes, "20261102-projet_x.org", "ID-P", "Projet X", PROJET_X)
+    ecrire_note(notes, "20261101-autre.org", "ID-A", "Autre", AUTRE)
+    daily = notes / cfg.DAILY_DIR
+    daily.mkdir(exist_ok=True)
+    ecrire_note(daily, "2026-11-02.org", "J02", "2026-11-02",
+                "* Journal\n- 15:27 Rendez-vous le 2026-11-03 à 13:30 : Coiffeur\n\n"
+                "* Tâches\n** TODO Appeler le garage\n")
+    ecrire_note(daily, "2026-11-03.org", "J03", "2026-11-03",
+                "* Agenda\n- <2026-11-03 Tue 13:30> Coiffeur, site du travail\n"
+                "- <2026-11-03 Tue> Anniversaire de Léa\n")
 
 
 @pytest.fixture

@@ -7,11 +7,11 @@ from datetime import datetime
 
 from .. import config as cfg
 from ..contexte import Contexte
+from ..dates import horodatage_inactif
 from ..ollama import llm
 from .base import Tache, refus
 from .todos import RE_MOTS_TODO, Todo, todos_ouverts
 
-JOURS_ORG = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 RE_PLANNING = re.compile(r"^(\s*)((?:SCHEDULED|DEADLINE):)")
 
 PROMPT = """On te donne une liste numérotée de tâches encore ouvertes (todo), chacune précédée
@@ -40,10 +40,6 @@ def mot_final(txt: str, abandon: bool) -> str:
         if finis:
             return finis[1] if abandon and len(finis) > 1 else finis[0]
     return cfg.MOT_ABANDON if abandon else cfg.MOT_FAIT
-
-
-def horodatage_inactif(t: datetime) -> str:
-    return f"[{t:%Y-%m-%d} {JOURS_ORG[t.weekday()]} {t:%H:%M}]"
 
 
 def clore(lignes: list[str], todo: Todo, mot: str, quand: datetime) -> list[str]:

@@ -4,7 +4,10 @@
 from pathlib import Path
 
 # --- Chemins ---------------------------------------------------------------
-JOURNAL = Path.home() / "Documents" / "journal-dictee.md"
+# Journaux dictés lus par zettel-ai (fusionnés par ordre chronologique). Hors de la base :
+# le journal brut (infos perso) ne doit pas être versionné ni poussé. Un chemin relatif
+# partirait de ROAM_DIR.
+JOURNAUX = (Path.home() / "Documents" / "journal-dictee.md",)   # hyprwhspr-journal
 ROAM_DIR = Path.home() / "bin" / "git-repos-personal" / "org-roam-database"
 STATE_DIR = Path.home() / ".local" / "state" / "zettel_ai"   # état, cache, rapports
 WORKTREE = STATE_DIR / "worktree"
@@ -31,6 +34,8 @@ TOP_K_INSTRUCTION = 15       # notes candidates pour trouver la note source d'un
 TOP_K_RESUME = 6             # notes lues pour résumer un sujet
 MAX_CARACTERES_NOTE = 3000   # texte de chaque note envoyé pour un résumé
 MAX_TODOS_FILTRE = 150       # au-delà, pré-filtrage des todos par embeddings avant Qwen
+ECART_MAX_JOURNEE = 730      # bilan / préparation : journée à 2 ans au plus de la dictée
+MAX_CARACTERES_BILAN = 8000  # dictées + journal du jour envoyés pour le résumé d'un bilan
 # Mots-clés si un fichier n'a pas de ligne #+TODO: : ceux de Doom Emacs
 # (TODO PROJ LOOP STRT WAIT HOLD IDEA | DONE KILL), + quelques variantes courantes.
 TODO_OUVERTS = ("TODO", "PROJ", "LOOP", "STRT", "WAIT", "HOLD", "IDEA",

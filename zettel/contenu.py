@@ -14,7 +14,7 @@ from .suivi import appliquer_suivi
 
 PROMPT_EXTRACTION = """Tu analyses une entrée de mon journal intime, dictée puis transcrite
 automatiquement (fautes, hésitations et répétitions possibles), pour alimenter ma base org-roam.
-Range ce qu'elle contient dans quatre listes.
+Range ce qu'elle contient dans cinq listes.
 
 1. sujets : ce qui mérite une note permanente. La base est organisée par CONCEPTS : une note
    par sujet (« Rust », « Compiled language »), qui regroupe tout ce qu'on sait du sujet.
@@ -42,8 +42,15 @@ Range ce qu'elle contient dans quatre listes.
    - date_limite = true pour une échéance (« avant », « au plus tard »), false pour le jour prévu.
 3. suivi : ce qui s'est passé sur un projet (une étape franchie), une phrase courte
    (« Première version installée sur le téléphone »), avec projet = titre du projet.
-4. perso : MA vie hors projets et hors sujets : rendez-vous, démarches, santé, famille,
-   événements, nouvelles. Une phrase courte chacune.
+4. perso : MA vie hors projets et hors sujets : démarches, santé, famille, événements,
+   nouvelles. Une phrase courte chacune, qui dit précisément quoi : n'écris JAMAIS d'élément
+   vague (« événement non spécifié ») ; s'il n'y a rien de précis, liste vide.
+5. rendez_vous : un rendez-vous ou un événement à un jour précis (« demain à 13h30, coiffeur »).
+   - texte = quoi et où, court (« Coiffeur, sur le site du travail »).
+   - date = AAAA-MM-JJ, calculée à partir de la date de la dictée ; heure = HH:MM, ou "" si
+     aucune heure n'est dite.
+   - Il va UNIQUEMENT ici, jamais aussi dans perso. Sans jour précis, ce n'est pas un
+     rendez-vous : mets-le dans perso.
 
 Chaque information va dans UNE seule liste : ce qui concerne un sujet ou un projet n'est
 jamais répété dans perso.
@@ -55,13 +62,15 @@ N'invente rien. Pour le reste, dans le doute, GARDE l'information : tout est rel
 
 Exemple, dictée le 2026-03-10 : « Hier soir j'ai écrit un script Bash, photo-backup, qui
 copie mes photos sur le NAS chaque nuit ; ça marche, il faudra ajouter le chiffrement avant
-la fin du mois. Et je dois appeler le garage demain, la voiture fait un bruit bizarre. »
+la fin du mois. Et je dois appeler le garage demain, la voiture fait un bruit bizarre.
+Dentiste jeudi à 9 h. »
 -> sujets : « photo-backup » (est_projet, but, Bash, fonctionne) ;
    taches : « Ajouter le chiffrement » (projet photo-backup, 2026-03-31, date_limite),
             « Appeler le garage » (sans projet, 2026-03-11) ;
    suivi : photo-backup « Script écrit, il fonctionne » ;
-   perso : « La voiture fait un bruit bizarre ».
-« Test du micro, ceci est un essai de dictée » -> les quatre listes vides."""
+   perso : « La voiture fait un bruit bizarre » ;
+   rendez_vous : « Dentiste » (2026-03-12, 09:00).
+« Test du micro, ceci est un essai de dictée » -> toutes les listes vides."""
 
 JOURS = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
 
@@ -129,8 +138,17 @@ SCHEMA_SUJETS = {
             },
         },
         "perso": {"type": "array", "items": {"type": "string"}},
+        "rendez_vous": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"texte": {"type": "string"}, "date": {"type": "string"},
+                               "heure": {"type": "string"}},
+                "required": ["texte", "date", "heure"],
+            },
+        },
     },
-    "required": ["sujets", "taches", "suivi", "perso"],
+    "required": ["sujets", "taches", "suivi", "perso", "rendez_vous"],
 }
 
 SCHEMA_DECISION = {
@@ -212,7 +230,7 @@ def traiter_entree(texte: str, ctx: Contexte) -> list[str]:
     sujets = fusionner_sujets(r["sujets"])
     print(f"  {len(sujets)} sujet(s) : {', '.join(s['titre'] for s in sujets) or '-'}"
           f" | {len(r.get('taches', []))} tâche(s), {len(r.get('suivi', []))} suivi(s),"
-          f" {len(r.get('perso', []))} info(s) perso")
+          f" {len(r.get('perso', []))} info(s) perso, {len(r.get('rendez_vous', []))} rendez-vous")
     actions = []
     for sujet in sujets:     # d'abord les sujets : les tâches peuvent viser un projet créé ici
         vec = embed([f"{sujet['titre']}. {sujet['contenu']}"])[0]

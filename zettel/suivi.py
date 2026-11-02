@@ -4,6 +4,8 @@
 - tâche sans projet        -> « ** TODO » dans « * Tâches » de la note du jour
 - avancement d'un projet   -> « - [AAAA-MM-JJ] … » dans « * Suivi » de la note du projet
 - logistique / infos perso -> « - HH:MM … » dans « * Journal » de la note du jour
+- rendez-vous daté         -> « - <AAAA-MM-JJ Ddd HH:MM> … » dans « * Agenda » de la note du
+                              jour du rendez-vous, + mention dans le journal du jour de la dictée
 Toujours en ajout : le contenu existant n'est jamais modifié. Une note de projet absente
 est créée (relue comme le reste avant fusion)."""
 
@@ -14,11 +16,10 @@ from pathlib import Path
 
 from . import config as cfg
 from .contexte import Contexte
+from .dates import heure_valide, horodatage_actif, horodatage_inactif
 from .ecriture import creer_note, inserer_dans_section
 from .index import Note, meme_titre
 from .ollama import embed
-
-JOURS_ORG = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
 def date_valide(texte: str, ref: date) -> date | None:
@@ -30,16 +31,14 @@ def date_valide(texte: str, ref: date) -> date | None:
     return d if -31 <= (d - ref).days <= 730 else None
 
 
-def horodatage_org(d: date) -> str:
-    return f"<{d:%Y-%m-%d} {JOURS_ORG[d.weekday()]}>"
-
-
-def lignes_todo(t: dict, ref: date) -> list[str]:
+def lignes_todo(t: dict, quand: datetime) -> list[str]:
+    """Titre, date prévue ou limite (ligne de planification), puis date de création dans un
+    tiroir :CREATED: (convention Org) : le bilan d'une journée retrouve les tâches créées."""
     lignes = [f"** TODO {t['texte'].strip().rstrip('.').strip()}"]
-    if (d := date_valide(t.get("date", ""), ref)):
+    if (d := date_valide(t.get("date", ""), quand.date())):
         mot = "DEADLINE" if t.get("date_limite") else "SCHEDULED"
-        lignes.append(f"{mot}: {horodatage_org(d)}")
-    return lignes
+        lignes.append(f"{mot}: {horodatage_actif(d)}")
+    return [*lignes, ":PROPERTIES:", f":CREATED:  {horodatage_inactif(quand)}", ":END:"]
 
 
 def todo_existe(txt: str, texte: str) -> bool:
@@ -103,10 +102,11 @@ def appliquer_taches(taches: list[dict], ctx: Contexte) -> list[str]:
         if path is not None and path.exists() and todo_existe(path.read_text(encoding="utf-8"), texte):
             print(f"  = TODO déjà présent : « {texte} » ({ou})")
             continue
-        lignes = lignes_todo(t, ref)
-        print(f"  ☐ TODO « {texte} » → {ou}" + (f"  {lignes[1]}" if len(lignes) > 1 else ""))
+        lignes = lignes_todo(t, ctx.quand)
+        planning = lignes[1] if lignes[1].startswith(("SCHEDULED:", "DEADLINE:")) else ""
+        print(f"  ☐ TODO « {texte} » → {ou}" + (f"  {planning}" if planning else ""))
         ajouter(path, "Tâches", lignes, ctx, f"☐ {texte} ({ou})")
-        actions.append(f"☐ TODO {texte} ({ou})" + (f", {lignes[1]}" if len(lignes) > 1 else ""))
+        actions.append(f"☐ TODO {texte} ({ou})" + (f", {planning}" if planning else ""))
     return actions
 
 
@@ -137,8 +137,38 @@ def appliquer_perso(perso: list[str], ctx: Contexte) -> list[str]:
     return [f"• journée du {ref:%Y-%m-%d} : {p}" for p in infos]
 
 
+def appliquer_rendez_vous(rdvs: list[dict], ctx: Contexte) -> tuple[list[str], list[str]]:
+    """Rendez-vous datés -> « * Agenda » de la note du jour du rendez-vous, avec un horodatage
+    actif (lu par la préparation de journée, et par org-agenda). Renvoie les actions et les
+    mentions pour le journal du jour de la dictée. Sans date valable, le rendez-vous reste une
+    simple info perso ; déjà noté (même ligne), il n'est ni répété ni mentionné."""
+    actions, mentions = [], []
+    for r in rdvs:
+        texte = r.get("texte", "").strip().rstrip(".").strip()
+        if not texte:
+            continue
+        d = date_valide(r.get("date", ""), ctx.quand.date())
+        if d is None:
+            mentions.append(texte)
+            continue
+        heure = heure_valide(r.get("heure", ""))
+        ligne = f"- {horodatage_actif(d, heure)} {texte}"
+        quand = f"{d:%Y-%m-%d}" + (f" à {heure}" if heure else "")
+        cible = chemin_journalier(d)
+        if cible.exists() and ligne in cible.read_text(encoding="utf-8").splitlines():
+            print(f"  = rendez-vous déjà noté : « {texte} » ({quand})")
+            continue
+        print(f"  ◷ RDV {quand} : {texte}")
+        ajouter(None if ctx.dry_run else note_journaliere(d), "Agenda", [ligne], ctx,
+                f"◷ {texte} ({quand})")
+        actions.append(f"◷ rendez-vous le {quand} : {texte}")
+        mentions.append(f"Rendez-vous le {quand} : {texte}")
+    return actions, mentions
+
+
 def appliquer_suivi(r: dict, ctx: Contexte) -> list[str]:
-    """Tâches, suivi de projet et infos perso extraits d'une entrée."""
+    """Tâches, suivi de projet, rendez-vous et infos perso extraits d'une entrée."""
+    rdv, mentions = appliquer_rendez_vous(r.get("rendez_vous", []), ctx)
     return (appliquer_taches(r.get("taches", []), ctx)
             + appliquer_suivi_projets(r.get("suivi", []), ctx)
-            + appliquer_perso(r.get("perso", []), ctx))
+            + rdv + appliquer_perso([*r.get("perso", []), *mentions], ctx))

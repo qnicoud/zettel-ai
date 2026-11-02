@@ -6,7 +6,10 @@
 # Les chemins acceptent « ~ ».
 
 [chemins]
-journal = "~/Documents/journal-dictee.md"              # journal dicté par hyprwhspr
+# Journaux dictés, fusionnés par ordre chronologique. Garde-les HORS de la base : ce sont des
+# données brutes et personnelles, qui ne doivent pas être versionnées ni poussées.
+# Un journal absent est signalé puis ignoré ; s'ils manquent tous, zettel-ai s'arrête.
+journaux = ["~/Documents/journal-dictee.md"]           # journal dicté par hyprwhspr
 base_org_roam = "~/bin/git-repos-personal/org-roam-database"   # dépôt git de la base
 dossier_journalier = "daily"                            # org-roam-dailies, relatif à la base
 

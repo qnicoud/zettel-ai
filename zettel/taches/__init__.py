@@ -3,12 +3,14 @@ choisie dans une liste fermée. Ajouter une tâche = créer son module et l'insc
 
 from ..contexte import Contexte
 from ..ollama import llm
-from . import extraire, fusionner, lier, marquer_fait, renommer, resume, todos
+from . import (bilan, extraire, fusionner, lier, marquer_fait, preparation, renommer, resume,
+               todos)
 from .base import Tache
 
 TACHES: dict[str, Tache] = {t.nom: t for t in (
     extraire.TACHE, fusionner.TACHE, renommer.TACHE, lier.TACHE,      # remaniement
-    marquer_fait.TACHE, todos.TACHE, resume.TACHE)}
+    marquer_fait.TACHE, todos.TACHE, resume.TACHE,                    # todos, lecture
+    bilan.TACHE, preparation.TACHE)}                                   # journées
 
 PROMPT_ROUTEUR = """Tu reçois une demande adressée à l'assistant d'une base de notes org-roam.
 Choisis LA tâche de la liste qui y correspond. Si aucune ne correspond vraiment, réponds
